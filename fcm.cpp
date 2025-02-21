@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <cmath>
+#include <cctype>
 
 using namespace std;
 
@@ -26,22 +27,28 @@ public:
         }
     }
 
-    double compute_entropy(const string &text) {
+    double compute_entropy(const string &text, const string &output_filename) {
         double H = 0.0;
+        ofstream entropy_output(output_filename);
+        entropy_output << "position,entropy_value" << endl;
+
         for (size_t i = k; i < text.size(); ++i) {
             string context = text.substr(i - k, k);
             char symbol = text[i];
             int count = context_counts[context][symbol] + alpha;
             int total = total_counts[context] + alpha * 256; // Assume ASCII
             double prob = (double)count / total;
+            double entropy_value = -log2(prob);
             H += log2(prob);
+            entropy_output << i << "," << entropy_value << endl;
         }
+        entropy_output.close();
         return -H / text.size();
     }
 };
 
 int main(int argc, char *argv[]) {
-    if (argc != 6) {
+    if (argc < 5) {
         cerr << "Usage: ./fcm <text_file> -k <order> -a <alpha>\n";
         return 1;
     }
@@ -50,15 +57,14 @@ int main(int argc, char *argv[]) {
     int k = -1;
     double alpha = -1.0;
 
-    // Positional argument for the file
-    filename = argv[1];  // The first argument is the filename
+    filename = argv[1];
 
     for (int i = 2; i < argc; i++) {
         string arg = argv[i];
-        if (arg == "-k") {
-            k = stoi(argv[++i]);   // Next argument is k
-        } else if (arg == "-a") {
-            alpha = stod(argv[++i]); // Next argument is alpha
+        if (arg == "-k" && i + 1 < argc) {
+            k = stoi(argv[++i]);
+        } else if (arg == "-a" && i + 1 < argc) {
+            alpha = stod(argv[++i]);
         }
     }
 
@@ -73,21 +79,19 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    string text((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+    string text, line;
+    while (getline(file, line)) {
+        for (char ch : line) {
+            if (isprint(ch)) text += ch;
+        }
+    }
     file.close();
 
     FCM model(k, alpha);
     model.train(text);
-    //print context counts
-    for (auto &context : model.context_counts) {
-        cout << context.first << ": ";
-        for (auto &symbol : context.second) {
-            cout << symbol.first << "=" << symbol.second << " ";
-        }
-        cout << endl;
-    }
-    //
+
     ofstream output("context_counts.csv");
+    output << "context,symbol,count" << endl;
     for (auto &context : model.context_counts) {
         for (auto &symbol : context.second) {
             output << context.first << "," << symbol.first << "," << symbol.second << endl;
@@ -95,6 +99,6 @@ int main(int argc, char *argv[]) {
     }
     output.close();
 
-    cout << "Average Information Content: " << model.compute_entropy(text) << " bits/symbol" << endl;
+    cout << "Average Information Content: " << model.compute_entropy(text, "entropy_data.csv") << " bits/symbol" << endl;
     return 0;
 }

@@ -8,7 +8,7 @@
 using namespace std;
 
 class FCM {
-private:
+public:
     int k;
     double alpha;
     unordered_map<string, unordered_map<char, int>> context_counts;
@@ -78,6 +78,23 @@ int main(int argc, char *argv[]) {
 
     FCM model(k, alpha);
     model.train(text);
+    //print context counts
+    for (auto &context : model.context_counts) {
+        cout << context.first << ": ";
+        for (auto &symbol : context.second) {
+            cout << symbol.first << "=" << symbol.second << " ";
+        }
+        cout << endl;
+    }
+    //
+    ofstream output("context_counts.csv");
+    for (auto &context : model.context_counts) {
+        for (auto &symbol : context.second) {
+            output << context.first << "," << symbol.first << "," << symbol.second << endl;
+        }
+    }
+    output.close();
+
     cout << "Average Information Content: " << model.compute_entropy(text) << " bits/symbol" << endl;
     return 0;
 }

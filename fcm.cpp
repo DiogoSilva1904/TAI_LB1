@@ -27,6 +27,17 @@ public:
         }
     }
 
+    void save_model(const string &filename) {
+        ofstream model_file(filename);
+        for (const auto &context : context_counts) {
+            for (const auto &entry : context.second) {
+                model_file << context.first << " " << entry.first << " " << entry.second << "\n";
+            }
+        }
+        model_file.close();
+    }
+
+
     double compute_entropy(const string &text, const string &output_filename) {
         double H = 0.0;
         ofstream entropy_output(output_filename);
@@ -89,6 +100,8 @@ int main(int argc, char *argv[]) {
 
     FCM model(k, alpha);
     model.train(text);
+    model.save_model("model.txt");
+
 
     ofstream output("context_counts.csv");
     output << "context,symbol,count" << endl;

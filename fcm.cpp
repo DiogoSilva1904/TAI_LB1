@@ -37,7 +37,6 @@ public:
         model_file.close();
     }
 
-
     double compute_entropy(const string &text, const string &output_filename) {
         double H = 0.0;
         ofstream entropy_output(output_filename);
@@ -91,17 +90,19 @@ int main(int argc, char *argv[]) {
     }
 
     string text, line;
+    // Read each line, filtering non-printable characters and replacing newline with a space.
     while (getline(file, line)) {
         for (char ch : line) {
-            if (isprint(ch)) text += ch;
+            if (isprint(ch))
+                text.push_back(ch);
         }
+        text.push_back(' '); // Replace newline with a space.
     }
     file.close();
 
     FCM model(k, alpha);
     model.train(text);
     model.save_model("model.txt");
-
 
     ofstream output("context_counts.csv");
     output << "context,symbol,count" << endl;

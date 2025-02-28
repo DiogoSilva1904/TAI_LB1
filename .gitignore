@@ -2,3 +2,4 @@ myenv
 fcm
 generator
 model.txt
+*.bin

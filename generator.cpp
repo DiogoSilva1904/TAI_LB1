@@ -1,4 +1,3 @@
-//gerador por maior número de counts
 #include <iostream>
 #include <fstream>
 #include <unordered_map>
@@ -17,93 +16,82 @@ public:
     Generator(int k, double alpha) : k(k), alpha(alpha) {}
 
     void load_model(const string &filename) {
-        ifstream model_file(filename);
+        ifstream model_file(filename, ios::binary);
         if (!model_file) {
             cerr << "Error opening model file!\n";
             exit(1);
         }
 
-        string line;
-        cout << "Loading model from " << filename << "...\n";
+        size_t map_size;
+        model_file.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
 
-        while (getline(model_file, line)) {
-            size_t last_space = line.find_last_of(" ");
-            size_t second_last_space = line.find_last_of(" ", last_space - 1);
+        for (size_t i = 0; i < map_size; ++i) {
+            size_t context_length;
+            model_file.read(reinterpret_cast<char*>(&context_length), sizeof(context_length));
 
-            if (last_space == string::npos || second_last_space == string::npos) {
-                cerr << "Error parsing line: " << line << "\n";
-                continue;
+            string context(context_length, ' ');
+            model_file.read(&context[0], context_length);
+
+            size_t symbol_count;
+            model_file.read(reinterpret_cast<char*>(&symbol_count), sizeof(symbol_count));
+
+            for (size_t j = 0; j < symbol_count; ++j) {
+                char symbol;
+                int count;
+                model_file.read(reinterpret_cast<char*>(&symbol), sizeof(symbol));
+                model_file.read(reinterpret_cast<char*>(&count), sizeof(count));
+
+                context_counts[context][symbol] = count;
+                total_counts[context] += count;
             }
-
-            string context = line.substr(0, second_last_space);
-            char symbol = line[second_last_space + 1];
-            int count = stoi(line.substr(last_space + 1));
-
-            context_counts[context][symbol] = count;
-            total_counts[context] += count;
-
-            // Print what is being loaded
-            //cout << "Context: '" << context << "', Symbol: '" << symbol 
-            //    << "', Count: " << count << "\n";
         }
-        
         model_file.close();
-        cout << "Model loading complete.\n";
     }
-
 
     char generate_next(const string &context) {
         if (context_counts.find(context) == context_counts.end()) {
-            cerr << "Warning: Unknown context '" << context << "'\n";
-            return ' '; // Fallback for unknown contexts
+            return ' ';
         }
 
         vector<pair<char, int>> candidates;
         int max_count = 0;
-
-        // Collect characters with their counts and find the max count
         for (const auto &[symbol, count] : context_counts[context]) {
             candidates.emplace_back(symbol, count);
-            if (count > max_count) {
-                max_count = count;
-            }
+            max_count = max(max_count, count);
         }
 
-        // Filter candidates to only include those with high probability
         vector<char> top_choices;
         for (const auto &[symbol, count] : candidates) {
-            if (count >= max_count * 0.7) {  // Allow some variation
+            if (count >= max_count * 0.7) {
                 top_choices.push_back(symbol);
             }
         }
 
-        // Randomly choose among the top candidates
         random_device rd;
         mt19937 gen(rd());
         uniform_int_distribution<int> dist(0, top_choices.size() - 1);
         return top_choices[dist(gen)];
     }
 
-
     string generate_text(const string &prior, int size) {
         string output = prior;
         string context = prior;
-        unordered_map<string, int> context_history;  // Track seen contexts
+
+        // Ensure the context is exactly k characters long
+        if (context.size() < k) {
+            context = string(k - context.size(), ' ') + context;  // Pad with spaces
+        } else {
+            context = context.substr(context.size() - k, k);
+        }
 
         for (int i = 0; i < size; ++i) {
-
             char next_char = generate_next(context);
-
-            // Debugging: Print step-by-step generation
-            cout << "Step " << i << ": Context = '" << context << "', Next Char = '" << next_char << "'\n";
-
             output += next_char;
-            context = output.substr(output.size() - k, k); // Update context
+            context = output.substr(output.size() - k, k);  // Always get the last k characters
         }
 
         return output;
     }
-
 
 };
 
@@ -113,30 +101,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    int k = -1, size = -1;
-    double alpha = -1.0;
-    string prior;
-
-    for (int i = 1; i < argc; i++) {
-        string arg = argv[i];
-        if (arg == "-k" && i + 1 < argc) {
-            k = stoi(argv[++i]);
-        } else if (arg == "-a" && i + 1 < argc) {
-            alpha = stod(argv[++i]);
-        } else if (arg == "-p" && i + 1 < argc) {
-            prior = argv[++i];
-        } else if (arg == "-s" && i + 1 < argc) {
-            size = stoi(argv[++i]);
-        }
-    }
-
-    if (prior.length() != k || k == -1 || alpha == -1.0 || size == -1) {
-        cerr << "Invalid parameters. Ensure prior has length k.\n";
-        return 1;
-    }
+    int k = stoi(argv[2]);
+    double alpha = stod(argv[4]);
+    string prior = argv[6];
+    int size = stoi(argv[8]);
 
     Generator gen(k, alpha);
-    gen.load_model("model.txt");
+    gen.load_model("model.bin");
     string generated_text = gen.generate_text(prior, size);
 
     cout << "Generated text:\n" << generated_text << endl;

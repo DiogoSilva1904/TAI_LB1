@@ -3,17 +3,89 @@
 #include <unordered_map>
 #include <vector>
 #include <random>
+#include <cmath>
+#include <iomanip>
+#include <algorithm>
+#include <thread>
+#include <chrono>
 
 using namespace std;
 
 class Generator {
 public:
-    int k;
+    vector<int> k_values; // Multiple k values
+    int max_k; // The maximum k value
     double alpha;
-    unordered_map<string, unordered_map<char, int>> context_counts;
-    unordered_map<string, int> total_counts;
+    vector<unordered_map<string, unordered_map<char, int>>> models; // One model per k value
+    vector<unordered_map<string, int>> total_counts; // One total count per k value
 
-    Generator(int k, double alpha) : k(k), alpha(alpha) {}
+    Generator(const vector<int>& ks, double alpha) : k_values(ks), alpha(alpha) {
+        // Sort k values in descending order
+        sort(k_values.begin(), k_values.end(), greater<int>());
+        max_k = k_values[0];
+        
+        // Initialize models for each k value
+        models.resize(k_values.size());
+        total_counts.resize(k_values.size());
+    }
+
+    void train(const string &text) {
+        // Ensure text is long enough for the maximum k
+        if (text.size() <= max_k) {
+            cerr << "Error: Training text must be longer than the maximum context length (k=" << max_k << ").\n";
+            exit(1);
+        }
+
+        // Train models for each k value
+        for (size_t i = 0; i < k_values.size(); i++) {
+            int k = k_values[i];
+            for (size_t j = k; j < text.size(); ++j) {
+                string context = text.substr(j - k, k);
+                char symbol = text[j];
+                models[i][context][symbol]++;
+                total_counts[i][context]++;
+            }
+        }
+    }
+
+    void save_model(const string &filename) {
+        ofstream model_file(filename, ios::binary);
+        if (!model_file) {
+            cerr << "Error opening model file for writing!\n";
+            exit(1);
+        }
+
+        // Save number of k values
+        size_t num_k_values = k_values.size();
+        model_file.write(reinterpret_cast<const char*>(&num_k_values), sizeof(num_k_values));
+
+        // Save each k value
+        for (size_t i = 0; i < num_k_values; i++) {
+            int k = k_values[i];
+            model_file.write(reinterpret_cast<const char*>(&k), sizeof(k));
+        }
+
+        // Save models for each k value
+        for (size_t m = 0; m < num_k_values; m++) {
+            size_t map_size = models[m].size();
+            model_file.write(reinterpret_cast<const char*>(&map_size), sizeof(map_size));
+
+            for (const auto &[context, symbols] : models[m]) {
+                size_t context_length = context.length();
+                model_file.write(reinterpret_cast<const char*>(&context_length), sizeof(context_length));
+                model_file.write(context.data(), context_length);
+
+                size_t symbol_count = symbols.size();
+                model_file.write(reinterpret_cast<const char*>(&symbol_count), sizeof(symbol_count));
+
+                for (const auto &[symbol, count] : symbols) {
+                    model_file.write(reinterpret_cast<const char*>(&symbol), sizeof(symbol));
+                    model_file.write(reinterpret_cast<const char*>(&count), sizeof(count));
+                }
+            }
+        }
+        model_file.close();
+    }
 
     void load_model(const string &filename) {
         ifstream model_file(filename, ios::binary);
@@ -22,95 +94,330 @@ public:
             exit(1);
         }
 
-        size_t map_size;
-        model_file.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
+        // Read number of k values
+        size_t num_k_values;
+        model_file.read(reinterpret_cast<char*>(&num_k_values), sizeof(num_k_values));
+        
+        // Read k values
+        k_values.resize(num_k_values);
+        for (size_t i = 0; i < num_k_values; i++) {
+            model_file.read(reinterpret_cast<char*>(&k_values[i]), sizeof(int));
+        }
+        
+        // Sort k values in descending order
+        sort(k_values.begin(), k_values.end(), greater<int>());
+        max_k = k_values[0];
+        
+        // Resize models and total_counts
+        models.resize(num_k_values);
+        total_counts.resize(num_k_values);
 
-        for (size_t i = 0; i < map_size; ++i) {
-            size_t context_length;
-            model_file.read(reinterpret_cast<char*>(&context_length), sizeof(context_length));
+        // Read models for each k value
+        for (size_t m = 0; m < num_k_values; m++) {
+            size_t map_size;
+            model_file.read(reinterpret_cast<char*>(&map_size), sizeof(map_size));
 
-            string context(context_length, ' ');
-            model_file.read(&context[0], context_length);
+            for (size_t i = 0; i < map_size; ++i) {
+                size_t context_length;
+                model_file.read(reinterpret_cast<char*>(&context_length), sizeof(context_length));
 
-            size_t symbol_count;
-            model_file.read(reinterpret_cast<char*>(&symbol_count), sizeof(symbol_count));
+                string context(context_length, ' ');
+                model_file.read(&context[0], context_length);
 
-            for (size_t j = 0; j < symbol_count; ++j) {
-                char symbol;
-                int count;
-                model_file.read(reinterpret_cast<char*>(&symbol), sizeof(symbol));
-                model_file.read(reinterpret_cast<char*>(&count), sizeof(count));
+                size_t symbol_count;
+                model_file.read(reinterpret_cast<char*>(&symbol_count), sizeof(symbol_count));
 
-                context_counts[context][symbol] = count;
-                total_counts[context] += count;
+                for (size_t j = 0; j < symbol_count; ++j) {
+                    char symbol;
+                    int count;
+                    model_file.read(reinterpret_cast<char*>(&symbol), sizeof(symbol));
+                    model_file.read(reinterpret_cast<char*>(&count), sizeof(count));
+
+                    models[m][context][symbol] = count;
+                    total_counts[m][context] += count;
+                }
             }
         }
         model_file.close();
     }
 
-    char generate_next(const string &context) {
-        if (context_counts.find(context) == context_counts.end()) {
-            return ' ';
+    double compute_entropy(const string &text, const string &output_filename) {
+        // Ensure text is long enough for the maximum k
+        if (text.size() <= max_k) {
+            cerr << "Error: Text for entropy calculation must be longer than the maximum context length (k=" << max_k << ").\n";
+            exit(1);
         }
 
-        vector<pair<char, int>> candidates;
-        int max_count = 0;
-        for (const auto &[symbol, count] : context_counts[context]) {
-            candidates.emplace_back(symbol, count);
-            max_count = max(max_count, count);
-        }
+        double H = 0.0;
+        ofstream entropy_output(output_filename);
+        entropy_output << "position,entropy_value,k_used\n";
 
-        vector<char> top_choices;
-        for (const auto &[symbol, count] : candidates) {
-            if (count >= max_count * 0.7) {
-                top_choices.push_back(symbol);
+        for (size_t i = max_k; i < text.size(); ++i) {
+            int k_used = -1;
+            double prob = 0.0;
+            char symbol = text[i];
+            
+            // Try to find the symbol in the model with the highest k first
+            for (size_t m = 0; m < k_values.size(); m++) {
+                int k = k_values[m];
+                if (i < k) continue;
+                
+                string context = text.substr(i - k, k);
+                
+                if (models[m].find(context) != models[m].end()) {
+                    int count = models[m][context][symbol] + alpha;
+                    int total = total_counts[m][context] + alpha * 256;
+                    prob = (double)count / total;
+                    k_used = k;
+                    break;
+                }
             }
+            
+            // If no matching context was found in any model, use a uniform distribution
+            if (k_used == -1) {
+                prob = 1.0 / 256; // Assuming 256 possible symbols (ASCII)
+                k_used = 0;
+            }
+            
+            double entropy_value = -log2(prob);
+            H += log2(prob);
+            entropy_output << i << "," << entropy_value << "," << k_used << "\n";
         }
-
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_int_distribution<int> dist(0, top_choices.size() - 1);
-        return top_choices[dist(gen)];
+        entropy_output.close();
+        return -H / (text.size() - max_k);
     }
 
-    string generate_text(const string &prior, int size) {
+    // Added parameter to track which k was used
+    pair<char, int> generate_next(const string &context) {
+        // Try each model in order (from highest k to lowest)
+        for (size_t m = 0; m < k_values.size(); m++) {
+            int k = k_values[m];
+            
+            // Extract the appropriate context length
+            string current_context;
+            if (context.length() >= k) {
+                current_context = context.substr(context.length() - k, k);
+            } else {
+                continue; // Context too short for this k value
+            }
+            
+            // If context exists in this model
+            if (models[m].find(current_context) != models[m].end() && !models[m][current_context].empty()) {
+                vector<pair<char, int>> candidates;
+                int max_count = 0;
+                
+                // Find the maximum count
+                for (const auto &[symbol, count] : models[m][current_context]) {
+                    candidates.emplace_back(symbol, count);
+                    max_count = max(max_count, count);
+                }
+                
+                // Use symbols with counts at least 70% of the maximum
+                vector<char> top_choices;
+                for (const auto &[symbol, count] : candidates) {
+                    if (count >= max_count * 0.7) {
+                        top_choices.push_back(symbol);
+                    }
+                }
+                
+                if (!top_choices.empty()) {
+                    // Randomly select from top choices
+                    random_device rd;
+                    mt19937 gen(rd());
+                    uniform_int_distribution<int> dist(0, top_choices.size() - 1);
+                    return {top_choices[dist(gen)], k};
+                }
+            }
+        }
+        
+        // If no context match found in any model, return a space
+        return {' ', 0};
+    }
+
+    string generate_text(const string &prior, int size, int delay_ms = 50) {
+        // Validate that the prior context is long enough
+        if (prior.size() < max_k) {
+            cerr << "Error: The prior context must be at least " << max_k << " characters long." << endl;
+            exit(1);
+        }
+
         string output = prior;
         string context = prior;
 
-        // Ensure the context is exactly k characters long
-        if (context.size() < k) {
-            context = string(k - context.size(), ' ') + context;  // Pad with spaces
-        } else {
-            context = context.substr(context.size() - k, k);
-        }
+        // First print the prior context
+        cout << prior << endl;
+        cout << flush;
 
         for (int i = 0; i < size; ++i) {
-            char next_char = generate_next(context);
+            // Generate next character and get which k was used
+            auto [next_char, k_used] = generate_next(context);
+            
+            // Print the character immediately with a small delay for visual effect
+            cout << next_char << flush;
+            
+            // Optionally print which k was used (can enable for debug)
+            // cout << "[k=" << k_used << "]" << flush;
+            
+            // Add a small delay for visual effect
+            if (delay_ms > 0) {
+                this_thread::sleep_for(chrono::milliseconds(delay_ms));
+            }
+            
+            // Update the output and context
             output += next_char;
-            context = output.substr(output.size() - k, k);  // Always get the last k characters
+            context = output.substr(output.size() - max_k, max_k);
         }
-
+        
+        cout << endl << endl;
         return output;
     }
-
 };
 
+void print_usage() {
+    cerr << "Usage:\n"
+         << "Train mode: ./enerator train -f <text_file> -k <max_order> -a <alpha>\n"
+         << "Generate mode: ./generator generate -k <max_order> -a <alpha> -p <prior> -s <size> [-d <delay_ms>]\n"
+         << "Example: ./generator train -f input.txt -k 10 -a 0.1\n"
+         << "Example: ./generator generate -k 10 -a 0.1 -p \"Hello world this is a test\" -s 100 -d 50\n";
+}
+
 int main(int argc, char *argv[]) {
-    if (argc < 7) {
-        cerr << "Usage: ./generator -k <order> -a <alpha> -p <prior> -s <size>\n";
+    if (argc < 2) {
+        print_usage();
         return 1;
     }
 
-    int k = stoi(argv[2]);
-    double alpha = stod(argv[4]);
-    string prior = argv[6];
-    int size = stoi(argv[8]);
+    string mode = argv[1];
 
-    Generator gen(k, alpha);
-    gen.load_model("model.bin");
-    string generated_text = gen.generate_text(prior, size);
+    if (mode == "train") {
+        if (argc < 7) {
+            print_usage();
+            return 1;
+        }
 
-    cout << "Generated text:\n" << generated_text << endl;
+        string filename;
+        int max_k = 0;
+        double alpha = 0.0;
+
+        for (int i = 2; i < argc; i += 2) {
+            string flag = argv[i];
+            if (flag == "-f" && i + 1 < argc) {
+                filename = argv[i + 1];
+            } else if (flag == "-k" && i + 1 < argc) {
+                max_k = stoi(argv[i + 1]);
+            } else if (flag == "-a" && i + 1 < argc) {
+                alpha = stod(argv[i + 1]);
+            }
+        }
+
+        if (filename.empty() || max_k <= 0 || alpha <= 0) {
+            cerr << "Invalid parameters for training.\n";
+            print_usage();
+            return 1;
+        }
+
+        // Create a range of k values: 1, 2, 3, ..., max_k
+        vector<int> k_values;
+        for (int k = 1; k <= max_k; k++) {
+            if (k == 1 || k == 2 || k == 3 || k == 5 || k == 8 || k == max_k || (k % 5 == 0 && k < max_k)) {
+                k_values.push_back(k);
+            }
+        }
+        if (find(k_values.begin(), k_values.end(), max_k) == k_values.end()) {
+            k_values.push_back(max_k);
+        }
+
+        // Read the input file
+        ifstream file(filename, ios::binary);
+        if (!file) {
+            cerr << "Error opening file " << filename << "\n";
+            return 1;
+        }
+
+        string text((istreambuf_iterator<char>(file)), istreambuf_iterator<char>());
+        file.close();
+
+        if (text.size() <= max_k) {
+            cerr << "Error: The input file must contain more than " << max_k << " characters.\n";
+            return 1;
+        }
+
+        cout << "Training with k values: ";
+        for (int k : k_values) {
+            cout << k << " ";
+        }
+        cout << endl;
+
+        // Create and train the model
+        Generator model(k_values, alpha);
+        model.train(text);
+        model.save_model("multi_k_model.bin");
+
+        cout << "Average Information Content: " << model.compute_entropy(text, "entropy_data.csv") << " bits/symbol" << endl;
+    } 
+    else if (mode == "generate") {
+        if (argc < 9) {
+            print_usage();
+            return 1;
+        }
+
+        int max_k = 0;
+        double alpha = 0.0;
+        string prior;
+        int size = 0;
+        int delay_ms = 50; // Default delay in milliseconds
+
+        for (int i = 2; i < argc; i += 2) {
+            string flag = argv[i];
+            if (flag == "-k" && i + 1 < argc) {
+                max_k = stoi(argv[i + 1]);
+            } else if (flag == "-a" && i + 1 < argc) {
+                alpha = stod(argv[i + 1]);
+            } else if (flag == "-p" && i + 1 < argc) {
+                prior = argv[i + 1];
+            } else if (flag == "-s" && i + 1 < argc) {
+                size = stoi(argv[i + 1]);
+            } else if (flag == "-d" && i + 1 < argc) {
+                delay_ms = stoi(argv[i + 1]);
+            }
+        }
+
+        if (max_k <= 0 || alpha <= 0 || size <= 0) {
+            cerr << "Invalid parameters for generation.\n";
+            print_usage();
+            return 1;
+        }
+
+        // Create a temporary model just to load the actual model
+        vector<int> temp_k = {max_k};
+        Generator gen(temp_k, alpha);
+        gen.load_model("multi_k_model.bin");
+
+        cout << "Loaded model with k values: ";
+        for (int k : gen.k_values) {
+            cout << k << " ";
+        }
+        cout << endl;
+
+        // Validate that the prior context is long enough
+        if (prior.size() < gen.max_k) {
+            cerr << "Error: The prior context must be at least " << gen.max_k << " characters long." << endl;
+            cerr << "Current prior length: " << prior.size() << " characters." << endl;
+            cerr << "Please provide a longer prior string or use a smaller k value." << endl;
+            return 1;
+        }
+
+        // Use the new delay parameter in the generate_text call
+        string generated_text = gen.generate_text(prior, size, delay_ms);
+        
+        // We don't need to print the generated text again since it's being output character by character
+        cout << "Generation complete! Total length: " << generated_text.size() << " characters." << endl;
+    } 
+    else {
+        cerr << "Unknown mode: " << mode << ". Use 'train' or 'generate'.\n";
+        print_usage();
+        return 1;
+    }
+
     return 0;
 }
-

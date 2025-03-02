@@ -25,15 +25,27 @@ Use the following command to compile the text generator:
 g++ generator.cpp -o generator -std=c++11
 ```
 
-## Running the Generator  
-To generate text based on an input prompt, run:  
+## Training the model 
+To train the model based on a sequence, run:  
 ```sh
-./generator -k 50 -a 0.01 -p " As armas e os bares assinalados, Que da ocidental" -s 500
+./generator train -f sequences/sequence2.txt -k 30 -a 0.1
 ```
-- `-k 50` – Context size  
+- `-f input.txt` – Path to the text file for training.
 - `-a 0.01` – Smoothing parameter  
-- `-p " As armas e os bares assinalados, Que da ocidental"` – Initial prompt  
-- `-s 500` – Output sequence length  
+- `-k 10 ` – Maximum context size (k-value). 
+
+
+## Generating Text
+To generate text based on an input prompt, run: 
+```sh
+./generator generate -k 30 -a 0.1 -p "As armas e os barões assinalados, que da ocidental" -s 200
+```
+
+- `-k 30` – Context size (must match the training context size).  
+- `-a 0.1` – Smoothing parameter (must match the training value).  
+- `-p " As armas e os bares assinalados, Que da ocidental"` – Initial prompt.  
+- `-s 500` – Output sequence length. 
+
 
 
 

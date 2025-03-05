@@ -9,7 +9,7 @@ make fcm
 ## Running FCM  
 To execute FCM with a sequence file, use:  
 ```sh
-./fcm ../sequences/sequence2.txt -k 3 -a 0.01
+./fcm sequences/sequence2.txt -k 3 -a 0.01
 ```
 - `../sequences/sequence2.txt` – Input sequence file  
 - `-k 3` – Context size (order)  
@@ -22,7 +22,7 @@ To execute FCM with a sequence file, use:
 ## Compiling the Generator  
 Use the following command to compile the text generator:  
 ```sh
-g++ generator.cpp -o generator -std=c++11
+make generator
 ```
 
 ## Training the model 

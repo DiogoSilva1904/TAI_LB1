@@ -25,32 +25,6 @@ public:
         }
     }
 
-    void save_model(const string &filename) {
-        ofstream model_file(filename, ios::binary);
-        if (!model_file) {
-            cerr << "Error opening model file for writing!\n";
-            exit(1);
-        }
-
-        size_t map_size = context_counts.size();
-        model_file.write(reinterpret_cast<const char*>(&map_size), sizeof(map_size));
-
-        for (const auto &[context, symbols] : context_counts) {
-            size_t context_length = context.length();
-            model_file.write(reinterpret_cast<const char*>(&context_length), sizeof(context_length));
-            model_file.write(context.data(), context_length);
-
-            size_t symbol_count = symbols.size();
-            model_file.write(reinterpret_cast<const char*>(&symbol_count), sizeof(symbol_count));
-
-            for (const auto &[symbol, count] : symbols) {
-                model_file.write(reinterpret_cast<const char*>(&symbol), sizeof(symbol));
-                model_file.write(reinterpret_cast<const char*>(&count), sizeof(count));
-            }
-        }
-        model_file.close();
-    }
-
     double compute_entropy(const string &text, const string &output_filename) {
         double H = 0.0;
         ofstream entropy_output(output_filename);
@@ -94,7 +68,6 @@ int main(int argc, char *argv[]) {
 
     FCM model(k, alpha);
     model.train(text);
-    model.save_model("model.bin");
 
     cout << "Average Information Content: " << model.compute_entropy(text, "entropy_data.csv") << " bits/symbol" << endl;
     return 0;

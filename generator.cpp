@@ -30,7 +30,6 @@ public:
     }
 
     void train(const string &text) {
-        // Ensure text is long enough for the maximum k
         if (text.size() <= max_k) {
             cerr << "Error: Training text must be longer than the maximum context length (k=" << max_k << ").\n";
             exit(1);
@@ -108,7 +107,6 @@ public:
         sort(k_values.begin(), k_values.end(), greater<int>());
         max_k = k_values[0];
         
-        // Resize models and total_counts
         models.resize(num_k_values);
         total_counts.resize(num_k_values);
 
@@ -141,53 +139,6 @@ public:
         model_file.close();
     }
 
-    double compute_entropy(const string &text, const string &output_filename) {
-        // Ensure text is long enough for the maximum k
-        if (text.size() <= max_k) {
-            cerr << "Error: Text for entropy calculation must be longer than the maximum context length (k=" << max_k << ").\n";
-            exit(1);
-        }
-
-        double H = 0.0;
-        ofstream entropy_output(output_filename);
-        entropy_output << "position,entropy_value,k_used\n";
-
-        for (size_t i = max_k; i < text.size(); ++i) {
-            int k_used = -1;
-            double prob = 0.0;
-            char symbol = text[i];
-            
-            // Try to find the symbol in the model with the highest k first
-            for (size_t m = 0; m < k_values.size(); m++) {
-                int k = k_values[m];
-                if (i < k) continue;
-                
-                string context = text.substr(i - k, k);
-                
-                if (models[m].find(context) != models[m].end()) {
-                    int count = models[m][context][symbol] + alpha;
-                    int total = total_counts[m][context] + alpha * 256;
-                    prob = (double)count / total;
-                    k_used = k;
-                    break;
-                }
-            }
-            
-            // If no matching context was found in any model, use a uniform distribution
-            if (k_used == -1) {
-                prob = 1.0 / 256; // Assuming 256 possible symbols (ASCII)
-                k_used = 0;
-            }
-            
-            double entropy_value = -log2(prob);
-            H += log2(prob);
-            entropy_output << i << "," << entropy_value << "," << k_used << "\n";
-        }
-        entropy_output.close();
-        return -H / (text.size() - max_k);
-    }
-
-    // Added parameter to track which k was used
     pair<char, int> generate_next(const string &context) {
         // Try each model in order (from highest k to lowest)
         for (size_t m = 0; m < k_values.size(); m++) {
@@ -235,7 +186,6 @@ public:
     }
 
     string generate_text(const string &prior, int size, int delay_ms = 50) {
-        // Validate that the prior context is long enough
         if (prior.size() < max_k) {
             cerr << "Error: The prior context must be at least " << max_k << " characters long." << endl;
             exit(1);
@@ -245,7 +195,7 @@ public:
         string context = prior;
 
         // First print the prior context
-        cout << prior << endl;
+        cout << prior;
         cout << flush;
 
         for (int i = 0; i < size; ++i) {
@@ -255,8 +205,8 @@ public:
             // Print the character immediately with a small delay for visual effect
             cout << next_char << flush;
             
-            // Optionally print which k was used (can enable for debug)
-            // cout << "[k=" << k_used << "]" << flush;
+            // print which k was used (can enable for debug)
+            //cout << "[k=" << k_used << "]" << flush;
             
             // Add a small delay for visual effect
             if (delay_ms > 0) {
@@ -316,10 +266,10 @@ int main(int argc, char *argv[]) {
             return 1;
         }
 
-        // Create a range of k values: 1, 2, 3, ..., max_k
+        // Create a range of k values: 2, 3, ..., max_k
         vector<int> k_values;
-        for (int k = 1; k <= max_k; k++) {
-            if (k == 1 || k == 2 || k == 3 || k == 5 || k == 8 || k == max_k || (k % 5 == 0 && k < max_k)) {
+        for (int k = 2; k <= max_k; k++) {
+            if (k == 2 || k == 3 || k == 5 || k == 8 || k == max_k || (k % 5 == 0 && k < max_k)) {
                 k_values.push_back(k);
             }
         }
@@ -353,7 +303,6 @@ int main(int argc, char *argv[]) {
         model.train(text);
         model.save_model("multi_k_model.bin");
 
-        cout << "Average Information Content: " << model.compute_entropy(text, "entropy_data.csv") << " bits/symbol" << endl;
     } 
     else if (mode == "generate") {
         if (argc < 9) {
@@ -365,7 +314,7 @@ int main(int argc, char *argv[]) {
         double alpha = 0.0;
         string prior;
         int size = 0;
-        int delay_ms = 50; // Default delay in milliseconds
+        int delay_ms = 25; // Default delay in milliseconds
 
         for (int i = 2; i < argc; i += 2) {
             string flag = argv[i];
@@ -410,7 +359,6 @@ int main(int argc, char *argv[]) {
         // Use the new delay parameter in the generate_text call
         string generated_text = gen.generate_text(prior, size, delay_ms);
         
-        // We don't need to print the generated text again since it's being output character by character
         cout << "Generation complete! Total length: " << generated_text.size() << " characters." << endl;
     } 
     else {

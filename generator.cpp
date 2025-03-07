@@ -16,10 +16,11 @@ public:
     vector<int> k_values; // Multiple k values
     int max_k; // The maximum k value
     double alpha;
+    double threshold; // Threshold for candidate character selection
     vector<unordered_map<string, unordered_map<char, int>>> models; // One model per k value
     vector<unordered_map<string, int>> total_counts; // One total count per k value
 
-    Generator(const vector<int>& ks, double alpha) : k_values(ks), alpha(alpha) {
+    Generator(const vector<int>& ks, double alpha, double threshold = 0.6) : k_values(ks), alpha(alpha), threshold(threshold) {
         // Sort k values in descending order
         sort(k_values.begin(), k_values.end(), greater<int>());
         max_k = k_values[0];
@@ -190,7 +191,7 @@ public:
                 // Use symbols with counts at least 60% of the maximum
                 vector<char> top_choices;
                 for (const auto &[symbol, count] : candidates) {
-                    if (count >= max_count * 0.1) {
+                    if (count >= max_count * threshold) {
                         top_choices.push_back(symbol);
                     }
                 }
@@ -255,9 +256,9 @@ public:
 void print_usage() {
     cerr << "Usage:\n"
          << "Train mode: ./enerator train -f <text_file> -k <max_order> -a <alpha>\n"
-         << "Generate mode: ./generator generate -k <max_order> -a <alpha> -p <prior> -s <size> [-d <delay_ms>]\n"
+         << "Generate mode: ./generator generate -k <max_order> -a <alpha> -p <prior> -s <size> [-d <delay_ms>] [-t <threshold>]\n"
          << "Example: ./generator train -f input.txt -k 10 -a 0.1\n"
-         << "Example: ./generator generate -k 10 -a 0.1 -p \"Hello world this is a test\" -s 100 -d 50\n";
+         << "Example: ./generator generate -k 10 -a 0.1 -p \"Hello world this is a test\" -s 100 -d 50 -t 0.2\n";
 }
 
 int main(int argc, char *argv[]) {
@@ -344,6 +345,8 @@ int main(int argc, char *argv[]) {
         string prior;
         int size = 0;
         int delay_ms = 25; // Default delay in milliseconds
+        double threshold = 0.6; // Default threshold
+
 
         for (int i = 2; i < argc; i += 2) {
             string flag = argv[i];
@@ -357,6 +360,8 @@ int main(int argc, char *argv[]) {
                 size = stoi(argv[i + 1]);
             } else if (flag == "-d" && i + 1 < argc) {
                 delay_ms = stoi(argv[i + 1]);
+            } else if (flag == "-t" && i + 1 < argc) {
+                threshold = stod(argv[i + 1]);
             }
         }
 
@@ -368,7 +373,7 @@ int main(int argc, char *argv[]) {
 
         // Create a temporary model just to load the actual model
         vector<int> temp_k = {max_k};
-        Generator gen(temp_k, alpha);
+        Generator gen(temp_k, alpha, threshold);
         gen.load_model("multi_k_model.bin");
 
         cout << "Loaded model with k values: ";

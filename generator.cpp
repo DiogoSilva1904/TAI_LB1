@@ -152,6 +152,15 @@ public:
                 continue; // Context too short for this k value
             }
             
+            // Count consecutive spaces at the end of context
+            int trailing_spaces = 0;
+            for (int i = current_context.size() - 1; i >= 0; i--) {
+                if (current_context[i] == ' ')
+                    trailing_spaces++;
+                else
+                    break;
+            }
+            
             // If context exists in this model
             if (models[m].find(current_context) != models[m].end() && !models[m][current_context].empty()) {
                 vector<pair<char, int>> candidates;
@@ -159,14 +168,29 @@ public:
                 
                 // Find the maximum count
                 for (const auto &[symbol, count] : models[m][current_context]) {
-                    candidates.emplace_back(symbol, count);
-                    max_count = max(max_count, count);
+                    // If we already have multiple spaces and this is another space,
+                    // reduce its count significantly to break the cycle
+                    if (trailing_spaces >= 2 && symbol == ' ') {
+                        // Still include spaces but with much lower priority
+                        candidates.emplace_back(symbol, count / 10);
+                    } else {
+                        candidates.emplace_back(symbol, count);
+                        max_count = max(max_count, count);
+                    }
                 }
                 
-                // Use symbols with counts at least 70% of the maximum
+                // Recalculate max_count if we modified any counts
+                if (trailing_spaces >= 2) {
+                    max_count = 0;
+                    for (const auto &[symbol, count] : candidates) {
+                        max_count = max(max_count, count);
+                    }
+                }
+                
+                // Use symbols with counts at least 60% of the maximum
                 vector<char> top_choices;
                 for (const auto &[symbol, count] : candidates) {
-                    if (count >= max_count * 0.7) {
+                    if (count >= max_count * 0.1) {
                         top_choices.push_back(symbol);
                     }
                 }
@@ -181,8 +205,13 @@ public:
             }
         }
         
-        // If no context match found in any model, return a space
-        return {' ', 0};
+        // If no context match found in any model, return a random character
+        // instead of always defaulting to a space
+        const string fallback_chars = "etaoinshrdlucmfwypgbvkjxqz ETAOINSHRDLUCMFWYPGBVKJXQZ,.;:-()[]{}";
+        random_device rd;
+        mt19937 gen(rd());
+        uniform_int_distribution<int> dist(0, fallback_chars.size() - 1);
+        return {fallback_chars[dist(gen)], 0};
     }
 
     string generate_text(const string &prior, int size, int delay_ms = 50) {

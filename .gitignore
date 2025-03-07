@@ -3,3 +3,4 @@ fcm
 generator
 model.txt
 *.bin
+*.csv

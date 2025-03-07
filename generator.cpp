@@ -224,6 +224,15 @@ public:
         string output = prior;
         string context = prior;
 
+        ofstream k_file("k_values.csv");
+        if (!k_file) {
+            cerr << "Error opening k_values.csv for writing!" << endl;
+            exit(1);
+        }
+
+        // Write CSV header
+        k_file << "Step,k_used\n";
+    
         // First print the prior context
         cout << prior;
         cout << flush;
@@ -237,8 +246,10 @@ public:
             
             // print which k was used (can enable for debug)
             //cout << "[k=" << k_used << "]" << flush;
+
+            k_file << i + 1 << "," << k_used << "\n";
             
-            // Add a small delay for visual effect
+            // Add a small delay for vi
             if (delay_ms > 0) {
                 this_thread::sleep_for(chrono::milliseconds(delay_ms));
             }
@@ -247,6 +258,8 @@ public:
             output += next_char;
             context = output.substr(output.size() - max_k, max_k);
         }
+
+        k_file.close();
         
         cout << endl << endl;
         return output;

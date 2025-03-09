@@ -215,7 +215,7 @@ public:
         return {fallback_chars[dist(gen)], 0};
     }
 
-    string generate_text(const string &prior, int size, int delay_ms = 50) {
+    string generate_text(const string &prior, int size, int delay_ms = 50, const string &write_file = "k_values.csv") {
         if (prior.size() < max_k) {
             cerr << "Error: The prior context must be at least " << max_k << " characters long." << endl;
             exit(1);
@@ -224,9 +224,9 @@ public:
         string output = prior;
         string context = prior;
 
-        ofstream k_file("k_values.csv");
+        ofstream k_file(write_file);
         if (!k_file) {
-            cerr << "Error opening k_values.csv for writing!" << endl;
+            cerr << "Error opening " << write_file << " for writing!" << endl;
             exit(1);
         }
 
@@ -281,6 +281,7 @@ int main(int argc, char *argv[]) {
     }
 
     string mode = argv[1];
+    string write_file = "k_values.csv";  // Default output file
 
     if (mode == "train") {
         if (argc < 7) {
@@ -376,6 +377,9 @@ int main(int argc, char *argv[]) {
             } else if (flag == "-t" && i + 1 < argc) {
                 threshold = stod(argv[i + 1]);
             }
+            else if (flag == "-w" && i + 1 < argc) {
+                write_file = argv[i + 1];  // Get custom output file name
+            }
         }
 
         if (max_k <= 0 || alpha <= 0 || size <= 0) {
@@ -404,7 +408,7 @@ int main(int argc, char *argv[]) {
         }
 
         // Use the new delay parameter in the generate_text call
-        string generated_text = gen.generate_text(prior, size, delay_ms);
+        string generated_text = gen.generate_text(prior, size, delay_ms, write_file);
         
         cout << "Generation complete! Total length: " << generated_text.size() << " characters." << endl;
     } 

@@ -164,40 +164,36 @@ public:
             
             // If context exists in this model
             if (models[m].find(current_context) != models[m].end() && !models[m][current_context].empty()) {
-                vector<pair<char, int>> candidates;
-                int max_count = 0;
+                vector<pair<char, double>> candidates;
+                double max_prob = 0.0;
+                // Use total_counts to get the raw total count for this context
+                int raw_total = total_counts[m][current_context];
+                // Number of candidate symbols for this context
+                int candidate_count = models[m][current_context].size();
+                // Compute smoothed total: add alpha for each candidate symbol
+                double smoothed_total = raw_total + alpha * candidate_count;
                 
-                // Find the maximum count
+                // Compute smoothed probability for each candidate symbol
                 for (const auto &[symbol, count] : models[m][current_context]) {
-                    // If we already have multiple spaces and this is another space,
-                    // reduce its count significantly to break the cycle
-                    if (trailing_spaces >= 2 && symbol == ' ') {
-                        // Still include spaces but with much lower priority
-                        candidates.emplace_back(symbol, count / 10);
-                    } else {
-                        candidates.emplace_back(symbol, count);
-                        max_count = max(max_count, count);
-                    }
+                    // Default probability calculation
+                    double prob = (count + alpha) / smoothed_total;
+                    // Penalize space if we already have several trailing spaces
+                    if (trailing_spaces >= 3 && symbol == ' ')
+                        prob = ((count / 10.0) + alpha) / smoothed_total;
+                    
+                    candidates.emplace_back(symbol, prob);
+                    max_prob = max(max_prob, prob);
                 }
                 
-                // Recalculate max_count if we modified any counts
-                if (trailing_spaces >= 2) {
-                    max_count = 0;
-                    for (const auto &[symbol, count] : candidates) {
-                        max_count = max(max_count, count);
-                    }
-                }
-                
-                // Use symbols with counts at least 60% of the maximum
+                // Select candidates with probabilities at least threshold * max_prob
                 vector<char> top_choices;
-                for (const auto &[symbol, count] : candidates) {
-                    if (count >= max_count * threshold) {
+                for (const auto &[symbol, prob] : candidates) {
+                    if (prob >= max_prob * threshold) {
                         top_choices.push_back(symbol);
                     }
                 }
                 
                 if (!top_choices.empty()) {
-                    // Randomly select from top choices
                     random_device rd;
                     mt19937 gen(rd());
                     uniform_int_distribution<int> dist(0, top_choices.size() - 1);
@@ -206,13 +202,8 @@ public:
             }
         }
         
-        // If no context match found in any model, return a random character
-        // instead of always defaulting to a space
-        const string fallback_chars = "etaoinshrdlucmfwypgbvkjxqz ETAOINSHRDLUCMFWYPGBVKJXQZ,.;:-()[]{}";
-        random_device rd;
-        mt19937 gen(rd());
-        uniform_int_distribution<int> dist(0, fallback_chars.size() - 1);
-        return {fallback_chars[dist(gen)], 0};
+        // If no context match found in any model, return a space
+        return {' ', 0};
     }
 
     string generate_text(const string &prior, int size, int delay_ms = 50, const string &write_file = "k_values.csv") {
@@ -358,7 +349,7 @@ int main(int argc, char *argv[]) {
         double alpha = 0.0;
         string prior;
         int size = 0;
-        int delay_ms = 25; // Default delay in milliseconds
+        int delay_ms = 15; // Default delay in milliseconds
         double threshold = 0.6; // Default threshold
 
 

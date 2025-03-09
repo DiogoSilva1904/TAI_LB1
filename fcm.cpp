@@ -75,14 +75,15 @@ int main(int argc, char *argv[]) {
     FCM model(k, alpha);
     model.train(text);
 
-    cout << "Alphabet: ";
+    /*cout << "Alphabet: ";
     for (char c : model.alphabet) {
         cout << c << " ";
     }
-    cout << endl;
+    cout << endl;*/
 
+    string output_filename = "entropy_data_k" + to_string(k) + ".csv";
 
-    cout << "Alphabet size: " << model.alphabet.size() << endl;
-    cout << "Average Information Content: " << model.compute_entropy(text, "entropy_data.csv") << " bits/symbol" << endl;
+    //cout << "Alphabet size: " << model.alphabet.size() << endl;
+    cout << "Average Information Content: " << model.compute_entropy(text, output_filename) << " bits/symbol" << endl;
     return 0;
 }

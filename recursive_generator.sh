@@ -2,10 +2,10 @@
 
 # Parameters
 INPUT_FILE="sequences/sequence2.txt"  # Initial training file
-K=5              # Context size
+K=5             # Context size
 ALPHA=0.1        # Smoothing parameter
-PRIOR="As armas e os barões assinalados, que da ocidental"
-SIZE=2000        # Generated text size
+PRIOR="As armas e os barões assinalados, que da lollol"
+SIZE=10000        # Generated text size
 THRESHOLD=0.6    # Candidate selection threshold
 ITERATIONS=3     # Number of recursive cycles
 

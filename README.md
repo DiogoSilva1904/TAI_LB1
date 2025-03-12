@@ -47,7 +47,25 @@ To generate text based on an input prompt, run:
 - `-s 500` – Output sequence length. 
 - `-t 0.2` Threshold for candidate character selection (0.0-1.0). Higher values produce more deterministic output, lower values create more variety.
 
+## Running Recursive Training (recursive_generator.sh)
+To run multiple iterations of training and text generation:
+```sh
+./recursive_generator.sh
+```
 
+- Trains the model iteratively using its own generated text.
+- Saves generated texts (generated_text_X.txt).
+- Stores k_values_X.csv files for analysis.
+
+## Running Multiple FCM Tests (run_fcm.sh)
+To compute entropy for different k and alpha values:
+
+```sh
+./run_fcm.sh
+```
+
+- Runs FCM for a range of parameters.
+- Saves results in fcm_results.txt and alpha_plot.csv.
 
 
 
